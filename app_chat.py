@@ -21,7 +21,9 @@ from data.yfinance_client import YFinanceClient
 from research.research_orchestrator import ResearchOrchestrator
 from ai.thesis_generator_v3 import ThesisGeneratorV3
 from strategies.strategy_selector_v2 import StrategySelectV2
+from strategies.strategy_selector import StrategySelector
 from strategies.contract_picker_v2 import ContractPickerV2
+from strategies.contract_picker import ContractPicker
 from analysis.pnl_calculator import PnLCalculator
 from visualization.pnl_chart import create_pnl_chart
 
@@ -174,19 +176,23 @@ def extract_ticker_from_message(message: str) -> Optional[str]:
     Extract stock ticker from user message.
     Returns uppercase ticker or None.
     """
-    # Simple extraction - look for 1-5 uppercase letters
+    # Simple extraction - look for 2-5 uppercase letters (avoid single letters like "I")
     import re
 
     # Try to find ticker pattern
     patterns = [
-        r'\b([A-Z]{1,5})\b',  # Standalone uppercase 1-5 chars
-        r'\$([A-Z]{1,5})\b',  # With $ prefix
+        r'\$([A-Z]{2,5})\b',  # With $ prefix (highest priority)
+        r'\b([A-Z]{2,5})\b',  # Standalone uppercase 2-5 chars
     ]
 
     for pattern in patterns:
         matches = re.findall(pattern, message.upper())
         if matches:
-            return matches[0]
+            # Filter out common English words
+            excluded = ['THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY', 'GET', 'HAS', 'HIM', 'HIS', 'HOW', 'MAN', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WAY', 'WHO', 'BOY', 'ITS', 'LET', 'PUT', 'SAY', 'SHE', 'TOO', 'USE']
+            for match in matches:
+                if match not in excluded:
+                    return match
 
     return None
 
@@ -222,65 +228,75 @@ def run_analysis(ticker: str, research_depth: str) -> Dict[str, Any]:
         articles_per_question = articles_map.get(research_depth, 2)
 
         # 1. Get stock data
-        with st.status("📊 Gathering stock data...") as status:
+        with st.status("[1/6] Gathering stock data...") as status:
             client = YFinanceClient()
             stock_data = client.get_stock_data(ticker)
+            news = client.get_news(ticker)
+            historical_vol = client.get_historical_volatility(ticker)
             results["stock_data"] = stock_data
-            status.update(label="✅ Stock data gathered", state="complete")
+            results["news"] = news
+            results["historical_vol"] = historical_vol
+            status.update(label="[DONE] Stock data gathered", state="complete")
 
-        # 2. Run research
-        with st.status(f"🔬 Researching {ticker} (this takes 2-5 minutes)...") as status:
-            orchestrator = ResearchOrchestrator(enable_research=True)
-            research = orchestrator.research_stock_and_strategy(
-                ticker=ticker,
-                articles_per_question=articles_per_question
-            )
-            results["research"] = research
-            status.update(label="✅ Research complete", state="complete")
-
-        # 3. Generate thesis
-        with st.status("🧠 Generating investment thesis...") as status:
+        # 2 & 3. Generate thesis with research
+        with st.status(f"[2/6] Generating investment thesis (with research, 2-5 min)...") as status:
             thesis_gen = ThesisGeneratorV3()
             thesis = thesis_gen.generate_thesis(
                 ticker=ticker,
                 stock_data=stock_data,
-                research=research
+                news=news,
+                historical_vol=historical_vol,
+                enable_research=True,
+                articles_per_question=articles_per_question
             )
             results["thesis"] = thesis
-            status.update(label="✅ Thesis generated", state="complete")
+            status.update(label="[DONE] Thesis generated", state="complete")
 
-        # 4. Select strategy
-        with st.status("📈 Selecting optimal strategy...") as status:
-            strategy_selector = StrategySelectV2()
-            strategy_rec = strategy_selector.select_strategy_with_research(
-                thesis=thesis,
-                research=research
+        # 4. Select strategy (fast - using rules, no additional research)
+        with st.status("[3/5] Selecting optimal strategy...") as status:
+            strategy_selector = StrategySelector()
+            # Use non-research method - thesis already did comprehensive research
+            strategy_rec = strategy_selector.select_strategy(
+                direction=thesis.direction,
+                conviction=thesis.conviction,
+                expected_move_pct=thesis.expected_move_pct,
+                timeframe_days=thesis.timeframe_days,
+                current_price=stock_data["current_price"],
+                historical_vol=historical_vol,
+                implied_vol=stock_data.get("implied_volatility")
             )
             results["strategy"] = strategy_rec
-            status.update(label="✅ Strategy selected", state="complete")
+            status.update(label="[DONE] Strategy selected", state="complete")
 
-        # 5. Pick contracts
-        with st.status("🎯 Finding optimal contracts...") as status:
-            picker = ContractPickerV2()
-            contracts = picker.pick_contracts_with_research(
-                ticker=ticker,
-                strategy=strategy_rec.strategy_name,
-                thesis=thesis,
-                research=research
+        # 5. Pick contracts (fast - using rules, no additional research)
+        with st.status("[4/5] Finding optimal contracts...") as status:
+            # Get options chain
+            options_chain = client.get_options_chain_all_expirations(ticker, max_expirations=5)
+
+            picker = ContractPicker()
+            # Use non-research method - thesis already did comprehensive research
+            contracts = picker.pick_contracts(
+                strategy_name=strategy_rec.strategy.value,
+                direction=thesis.direction,
+                target_price=thesis.target_price,
+                timeframe_days=thesis.timeframe_days,
+                current_price=stock_data["current_price"],
+                options_chain=options_chain
             )
             results["contracts"] = contracts
-            status.update(label="✅ Contracts selected", state="complete")
+            status.update(label="[DONE] Contracts selected", state="complete")
 
         # 6. Calculate P/L
-        with st.status("💰 Calculating risk/reward...") as status:
+        with st.status("[5/5] Calculating risk/reward...") as status:
             calculator = PnLCalculator()
-            pnl = calculator.calculate_pnl(
-                ticker=ticker,
+            pnl = calculator.calculate_complete_analysis(
+                contracts=contracts,
                 current_price=stock_data["current_price"],
-                contracts=contracts
+                volatility=historical_vol,
+                days_to_expiration=thesis.timeframe_days
             )
             results["pnl"] = pnl
-            status.update(label="✅ Analysis complete!", state="complete")
+            status.update(label="[DONE] Analysis complete!", state="complete")
 
         return results
 
@@ -324,12 +340,16 @@ def display_results_summary(results: Dict[str, Any]) -> str:
 
     with col2:
         st.subheader("📈 Recommended Strategy")
-        st.markdown(f"**Strategy:** {strategy.strategy_name}")
-        st.markdown(f"**Rationale:** {strategy.strategy_rationale}")
+        st.markdown(f"**Strategy:** {strategy.strategy.value}")
+        st.markdown(f"**Rationale:** {strategy.rationale}")
 
-        if strategy.strategy_explanation:
-            with st.expander("💡 Why This Strategy?"):
-                st.write(strategy.strategy_explanation)
+        # Strategy explanation from rationale
+        with st.expander("💡 Strategy Details"):
+            st.write(f"**Risk Level:** {strategy.risk_level}")
+            st.write(f"**Capital Required:** {strategy.capital_required}")
+            st.write(f"**Ideal Conditions:**")
+            for condition in strategy.ideal_conditions:
+                st.write(f"  - {condition}")
 
     # Contracts
     st.subheader("🎯 Selected Contracts")
@@ -339,26 +359,20 @@ def display_results_summary(results: Dict[str, Any]) -> str:
     # P/L Chart
     st.subheader("💰 Risk/Reward Analysis")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Max Profit", f"${pnl.max_profit:,.0f}")
-    col2.metric("Max Loss", f"${pnl.max_loss:,.0f}")
-    col3.metric("Risk/Reward", f"{pnl.max_profit / abs(pnl.max_loss):.2f}:1")
+    col1.metric("Max Profit", f"${pnl['max_profit']:,.0f}")
+    col2.metric("Max Loss", f"${pnl['max_loss']:,.0f}")
+    col3.metric("Risk/Reward", f"{pnl['risk_reward_ratio']:.2f}:1")
 
     # Create P/L chart
-    import pandas as pd
-    pnl_df = pd.DataFrame({
-        'stock_price': [p[0] for p in pnl.price_pnl_pairs],
-        'pnl': [p[1] for p in pnl.price_pnl_pairs]
-    })
-
     fig = create_pnl_chart(
-        pnl_curve=pnl_df,
+        pnl_curve=pnl['pnl_curve'],
         current_price=results["stock_data"]["current_price"],
-        max_profit=pnl.max_profit,
-        max_loss=pnl.max_loss,
-        max_profit_price=pnl.max_profit_price if hasattr(pnl, 'max_profit_price') else results["stock_data"]["current_price"],
-        max_loss_price=pnl.max_loss_price if hasattr(pnl, 'max_loss_price') else results["stock_data"]["current_price"],
-        breakevens=pnl.breakeven_prices,
-        strategy_name=strategy.strategy_name
+        max_profit=pnl['max_profit'],
+        max_loss=pnl['max_loss'],
+        max_profit_price=pnl['max_profit_price'],
+        max_loss_price=pnl['max_loss_price'],
+        breakevens=pnl['breakevens'],
+        strategy_name=strategy.strategy.value
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -372,8 +386,8 @@ def display_results_summary(results: Dict[str, Any]) -> str:
 
 📊 **Thesis:** {thesis.direction} with {thesis.conviction}% conviction
 🎯 **Expected Move:** {thesis.expected_move}
-📈 **Strategy:** {strategy.strategy_name}
-💰 **Risk/Reward:** Max profit ${pnl.max_profit:,.0f} / Max loss ${pnl.max_loss:,.0f}
+📈 **Strategy:** {strategy.strategy.value}
+💰 **Risk/Reward:** Max profit ${pnl['max_profit']:,.0f} / Max loss ${pnl['max_loss']:,.0f}
 🔬 **Research:** Analyzed {research.stock_research.article_count + research.strategy_research.article_count} articles
 
 You can now ask me questions about:
@@ -410,7 +424,7 @@ def main():
         # Show API key status
         api_key = os.getenv(f"{provider.upper()}_API_KEY")
         if api_key:
-            st.success(f"✅ {provider.title()} API key found")
+            st.success(f"[DONE] {provider.title()} API key found")
         else:
             st.error(f"❌ {provider.upper()}_API_KEY not found in .env")
 

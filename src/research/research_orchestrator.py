@@ -249,8 +249,8 @@ IMPORTANT: SEC filings (10-K, 10-Q) will be researched separately, so focus on:
             questions = sec_questions + self._generate_stock_questions(ticker)
 
         print(f"Researching {len(questions)} stock fundamental questions...")
-        print(f"  ✅ Guaranteed: 10-K annual report + 10-Q quarterly report")
-        print(f"  📊 Additional: {len(questions) - 2} supplementary questions")
+        print(f"  [OK] Guaranteed: 10-K annual report + 10-Q quarterly report")
+        print(f"  [+] Additional: {len(questions) - 2} supplementary questions")
 
         all_articles = []
         llm_count = 0
@@ -319,10 +319,10 @@ IMPORTANT: SEC filings (10-K, 10-Q) will be researched separately, so focus on:
 
         # Print hybrid model stats
         print(f"\n[HYBRID MODEL STATS]")
-        print(f"  ✅ SEC Filings (10-K/10-Q): {sec_count} articles")
-        print(f"  🤖 LLM-only answers: {llm_count}")
-        print(f"  🌐 Web articles: {web_count}")
-        print(f"  📊 Total sources: {len(all_articles)}")
+        print(f"  [SEC] SEC Filings (10-K/10-Q): {sec_count} articles")
+        print(f"  [LLM] LLM-only answers: {llm_count}")
+        print(f"  [WEB] Web articles: {web_count}")
+        print(f"  [STAT] Total sources: {len(all_articles)}")
 
         total_words = sum(a.word_count for a in all_articles)
         sources = list(set(a.source for a in all_articles))
@@ -415,9 +415,9 @@ IMPORTANT: SEC filings (10-K, 10-Q) will be researched separately, so focus on:
 
         # Print hybrid model stats for strategy selection
         print(f"\n[HYBRID MODEL STATS - STRATEGY]")
-        print(f"  🤖 LLM-only answers: {llm_count}")
-        print(f"  🌐 Web articles: {web_count}")
-        print(f"  📊 Total sources: {len(all_articles)}")
+        print(f"  [LLM] LLM-only answers: {llm_count}")
+        print(f"  [WEB] Web articles: {web_count}")
+        print(f"  [STAT] Total sources: {len(all_articles)}")
 
         total_words = sum(a.word_count for a in all_articles)
         sources = list(set(a.source for a in all_articles))
