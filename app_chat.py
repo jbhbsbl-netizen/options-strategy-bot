@@ -353,8 +353,10 @@ def display_results_summary(results: Dict[str, Any]) -> str:
 
     # Contracts
     st.subheader("🎯 Selected Contracts")
+    ticker = results["stock_data"]["symbol"] if "symbol" in results["stock_data"] else contracts[0].contract.symbol[:4]  # Extract ticker from symbol
     for i, contract in enumerate(contracts, 1):
-        st.markdown(f"**Leg {i}:** {contract.action} {contract.ticker} {contract.strike}C @ ${contract.premium:.2f}")
+        option_type = contract.contract.option_type[0].upper()  # 'C' or 'P'
+        st.markdown(f"**Leg {i}:** {contract.action} {ticker} {contract.contract.strike}{option_type} @ ${contract.premium:.2f}")
 
     # P/L Chart
     st.subheader("💰 Risk/Reward Analysis")
