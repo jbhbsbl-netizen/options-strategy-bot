@@ -179,26 +179,31 @@ class PnLCalculator:
                     volatility=volatility * 100
                 )
 
-                # Get Greeks based on option type
+                # Get Greeks based on option type.
+                # mibian returns per-share values:
+                #   callDelta/putDelta: already 0-1 decimal (no division needed)
+                #   callTheta/putTheta: annual theta — divide by 365 for daily
+                #   vega: per 1% IV change per share (no division needed)
+                #   gamma: per $1 stock move per share (no division needed)
                 if contract.option_type == "call":
-                    delta = bs.callDelta / 100  # Convert back to decimal
-                    theta = bs.callTheta / 365  # Daily theta
-                    vega = bs.vega / 100
-                    gamma = bs.gamma
+                    delta = bs.callDelta            # Already 0-1 decimal
+                    theta = bs.callTheta / 365      # Annual → daily
+                    vega = bs.vega                  # Per 1% IV change, per share
+                    gamma = bs.gamma                # Per $1 move, per share
                 else:  # put
-                    delta = bs.putDelta / 100
+                    delta = bs.putDelta             # Already -1 to 0 decimal
                     theta = bs.putTheta / 365
-                    vega = bs.vega / 100
+                    vega = bs.vega
                     gamma = bs.gamma
 
                 # Apply sign based on BUY/SELL
                 multiplier = 1 if contract.action == "BUY" else -1
 
-                # Scale by quantity and multiply by 100 (shares per contract)
-                portfolio_delta += delta * multiplier * contract.quantity
-                portfolio_theta += theta * multiplier * contract.quantity
-                portfolio_vega += vega * multiplier * contract.quantity
-                portfolio_gamma += gamma * multiplier * contract.quantity
+                # Multiply by 100 (shares per contract) to get portfolio-level Greeks
+                portfolio_delta += delta * multiplier * contract.quantity * 100
+                portfolio_theta += theta * multiplier * contract.quantity * 100
+                portfolio_vega += vega * multiplier * contract.quantity * 100
+                portfolio_gamma += gamma * multiplier * contract.quantity * 100
 
             except Exception as e:
                 print(f"Warning: Could not calculate Greeks for {contract.display_name}: {e}")
