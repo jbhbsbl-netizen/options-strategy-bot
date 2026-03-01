@@ -25,18 +25,27 @@ Enter a stock ticker and the bot:
 
 ## Interfaces
 
-### Chat Interface (primary)
-A conversational LLM-powered interface. The bot walks you through the analysis in a natural dialogue and answers follow-up questions about the results.
+Three interfaces were built to demonstrate different aspects of the system. Each serves a distinct purpose:
+
+### `app_chat.py` — Conversational LLM Interface
+The primary interface for the LLM integration requirement. The bot conducts a full dialogue: collects the ticker, asks about research depth, runs the analysis with live progress updates, presents results, and then answers follow-up questions using the full analysis as context. Supports streaming responses from both OpenAI and Anthropic.
 
 ```bash
 streamlit run app_chat.py
 ```
 
-### Professional Form UI
-A structured form-based interface with multi-tab results, interactive P&L charts, and detailed research citations.
+### `app_professional.py` — Full-Featured Form UI
+A structured multi-tab interface that exposes the complete pipeline — thesis details, strategy rationale, contract selection, interactive P&L chart, portfolio Greeks, and full research citation list. Built to show the depth of the analysis output rather than the conversational experience.
 
 ```bash
 streamlit run app_professional.py
+```
+
+### `app_research.py` — Research Transparency UI
+A focused interface that surfaces the autonomous research process itself — which questions were generated, which sources were found, how many articles were read, and what content was extracted. Built to demonstrate and debug the web research pipeline.
+
+```bash
+streamlit run app_research.py
 ```
 
 ---

@@ -216,7 +216,7 @@ def run_analysis(ticker: str, research_depth: str) -> Dict[str, Any]:
     Run the complete analysis pipeline.
     Returns dict with all results.
     """
-    results = {}
+    results = {"research_depth": research_depth}
 
     try:
         # Map research depth to articles per question
@@ -313,7 +313,6 @@ def display_results_summary(results: Dict[str, Any]) -> str:
     strategy = results["strategy"]
     contracts = results["contracts"]
     pnl = results["pnl"]
-    research = results["research"]
 
     # Display in columns
     col1, col2 = st.columns(2)
@@ -380,17 +379,16 @@ def display_results_summary(results: Dict[str, Any]) -> str:
 
     # Research summary
     st.subheader("📚 Research Summary")
-    st.markdown(f"**Articles Read:** {research.stock_research.article_count + research.strategy_research.article_count}")
-    st.markdown(f"**Words Analyzed:** {research.stock_research.total_words + research.strategy_research.total_words:,}")
+    st.markdown(f"**Data Source:** yfinance + autonomous web research (DuckDuckGo)")
+    st.markdown(f"**Analysis Depth:** {results.get('research_depth', 'moderate').title()} mode")
 
     # Generate summary for LLM
-    summary = f"""Analysis complete for {contracts[0].ticker}!
+    summary = f"""Analysis complete for {st.session_state.ticker}!
 
 📊 **Thesis:** {thesis.direction} with {thesis.conviction}% conviction
 🎯 **Expected Move:** {thesis.expected_move}
 📈 **Strategy:** {strategy.strategy.value}
 💰 **Risk/Reward:** Max profit ${pnl['max_profit']:,.0f} / Max loss ${pnl['max_loss']:,.0f}
-🔬 **Research:** Analyzed {research.stock_research.article_count + research.strategy_research.article_count} articles
 
 You can now ask me questions about:
 - Why I chose this thesis
@@ -535,16 +533,15 @@ Current analysis results for {st.session_state.ticker}:
 - Direction: {results['thesis'].direction}
 - Conviction: {results['thesis'].conviction}%
 - Summary: {results['thesis'].thesis_summary}
-- Research Insights: {results['thesis'].research_insights}
 
 **Strategy:**
-- Name: {results['strategy'].strategy_name}
-- Rationale: {results['strategy'].strategy_rationale}
-- Explanation: {results['strategy'].strategy_explanation}
+- Name: {results['strategy'].strategy.value}
+- Rationale: {results['strategy'].rationale}
+- Risk Level: {results['strategy'].risk_level}
 
 **Risk/Reward:**
-- Max Profit: ${results['pnl'].max_profit:,.0f}
-- Max Loss: ${results['pnl'].max_loss:,.0f}
+- Max Profit: ${results['pnl']['max_profit']:,.0f}
+- Max Loss: ${results['pnl']['max_loss']:,.0f}
 
 Use this context to answer the user's question."""}
                 ]
